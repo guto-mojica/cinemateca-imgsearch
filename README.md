@@ -1,6 +1,6 @@
-# 🎞 Cinemateca AI
+# 🎞 Cinemateca imgsearch
 
-**Sistema de catalogação audiovisual com Inteligência Artificial para acervos cinematográficos.**
+**Sistema de catalogação audiovisual com modelos locais para acervos cinematográficos.**
 
 Desenvolvido para cinematecas nacionais e arquivos públicos de filme, com foco em
 acervos históricos em preto-e-branco e baixa resolução.
@@ -13,7 +13,7 @@ acervos históricos em preto-e-branco e baixa resolução.
 
 ## O que é
 
-Cinemateca AI é uma ferramenta open-source que processa um arquivo de vídeo e gera
+Cinemateca imgsearch é uma ferramenta open-source que processa um arquivo de vídeo e gera
 automaticamente um catálogo pesquisável com:
 
 - **Segmentação de cenas** — detecta cortes e extrai um keyframe representativo de cada cena
@@ -31,7 +31,7 @@ Tudo roda **localmente**, sem enviar dados para APIs externas.
 ## Por que este projeto existe
 
 Cinematecas e arquivos públicos ao redor do mundo têm acervos de milhares de filmes
-que só existem como descrições manuais — às vezes apenas o título, o ano e o diretor.
+que só existem como descrições manuais — às vezes apenas o título, o ano, duração e ficha técnica.
 A catalogação detalhada de uma coleção grande é inviável manualmente.
 
 Este sistema não substitui o trabalho curatorial humano. Ele gera um primeiro nível
@@ -58,8 +58,8 @@ de metadados que:
 
 ```bash
 # 1. Clonar o repositório
-git clone https://github.com/cinemateca-brasileira/cinemateca-ai.git
-cd cinemateca-ai
+git clone https://github.com/cinemateca-brasileira/cinemateca-imgsearch.git
+cd cinemateca-imgsearch
 
 # 2. Criar e ativar ambiente virtual
 python3 -m venv .venv
@@ -212,7 +212,7 @@ scene_detection:
 O desenvolvimento usa **Jeca Tatu (1959)** de Amácio Mazzaropi como referência:
 
 - Formato: P&B, ~90 minutos
-- Fonte: [Internet Archive](https://archive.org/details/paixaoflix_mazzaropi__jeca_tatu) (domínio público)
+- Fonte: [Internet Archive](https://archive.org/details/paixaoflix_mazzaropi__jeca_tatu) (~~domínio público~~)
 - Escolhido por representar os desafios típicos de acervo: P&B, qualidade de digitalização
   variável, variedade de ambientes (rural/urbano, interno/externo)
 
