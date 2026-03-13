@@ -35,7 +35,7 @@ frame_extraction:
 
 # ── Detecção de cenas (NB02) ──────────────────────────────────────────────────
 scene_detection:
-  detector: "content"       # "content" ou "adaptive"
+  detector: "adaptive"      # "content" ou "adaptive" — adaptive é mais robusto para filmes P&B de arquivo
   # ContentDetector
   content_threshold: 27.0   # menor = mais sensível (mais cortes detectados)
   # AdaptiveDetector
@@ -43,7 +43,6 @@ scene_detection:
   # Compartilhado
   min_scene_len: 15         # duração mínima da cena em frames
   keyframes_per_scene: 3    # 1=frame do meio; 3=início/meio/fim
-  frame_skip: 1             # analisa 1 a cada N+1 frames (0=todos, 1=metade, 2=um terço) — acelera detecção
 
 # ── Análise visual (NB03) ─────────────────────────────────────────────────────
 visual_analysis:

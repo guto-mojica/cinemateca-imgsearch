@@ -54,14 +54,12 @@ class SceneDetector:
             self.adaptive_threshold = sd.adaptive_threshold
             self.min_scene_len = sd.min_scene_len
             self.keyframes_per_scene = sd.keyframes_per_scene
-            self.frame_skip = getattr(sd, "frame_skip", 1)
         else:
-            self.detector_type = "content"
+            self.detector_type = "adaptive"
             self.content_threshold = 27.0
             self.adaptive_threshold = 3.0
             self.min_scene_len = 15
             self.keyframes_per_scene = 3
-            self.frame_skip = 1
 
     def detect(self, video_path: str | Path) -> SceneList:
         """
@@ -115,7 +113,7 @@ class SceneDetector:
                 self.min_scene_len,
             )
 
-        scene_manager.detect_scenes(video_manager, show_progress=False, frame_skip=self.frame_skip)
+        scene_manager.detect_scenes(video_manager, show_progress=True)
         scene_list = scene_manager.get_scene_list()
         video_manager.capture.release()
 
