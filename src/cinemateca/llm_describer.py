@@ -7,8 +7,9 @@ o modelo de linguagem visual Moondream 2 (vikhyatk/moondream2).
 Baseado no Notebook 05 (05_descricao_llm.ipynb).
 
 Estratégia de eficiência:
+  - Prompt único combinado: 1 chamada ao decoder por frame (antes eram 6)
   - Encode da imagem feito UMA vez por frame
-  - Múltiplas perguntas reutilizam o mesmo encoding
+  - float16 em GPU/MPS, float32 em CPU
   - Processamento com checkpoint periódico (retomada automática)
 """
 
@@ -29,32 +30,58 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 
-# ─── Prompts e mapeamentos ────────────────────────────────────────────────────
+# ─── Prompt combinado ────────────────────────────────────────────────────────
+#
+# Uma única chamada ao decoder por frame em vez de 6 separadas.
+# Reduz 2100 chamadas (350 cenas × 6) para 350 (350 × 1) → ~5-6× mais rápido.
 
-PROMPTS = {
-    "description":
-        "Describe this film scene in one or two sentences. "
-        "Focus on the main subject, action, and setting.",
+COMBINED_PROMPT = (
+    "Analyze this film scene. Reply with a JSON object only, no other text:\n"
+    '{\n'
+    '  "description": "one or two sentences about subject, action and setting",\n'
+    '  "location": "indoor or outdoor",\n'
+    '  "setting": "2-4 words e.g. rural field, urban street, farm, village",\n'
+    '  "time_of_day": "day, night, or unknown",\n'
+    '  "people_and_action": "e.g. 2 people talking or: no people visible",\n'
+    '  "objects": "up to 6 items comma-separated"\n'
+    '}'
+)
 
-    "location":
-        "Is this scene indoors or outdoors? Answer with one word: indoor or outdoor.",
+_COMBINED_KEYS = (
+    "description", "location", "setting",
+    "time_of_day", "people_and_action", "objects",
+)
 
-    "setting":
-        "Describe the setting in 2-4 words. Examples: urban street, rural field, "
-        "interior room, forest, village, farm.",
 
-    "time_of_day":
-        "What time of day does this scene appear to be? "
-        "Answer with one word: day, night, or unknown.",
+def _parse_combined_response(text: str) -> dict:
+    """
+    Extrai os campos estruturados da resposta JSON do modelo.
 
-    "people_and_action":
-        "How many people are visible? What are they doing? "
-        "Answer briefly, e.g.: '2 people talking' or 'no people visible'.",
+    Tenta json.loads primeiro; se falhar, tenta extrair o bloco JSON com regex;
+    se ainda falhar, retorna strings de erro para cada campo.
+    """
+    # Remover fences de markdown (```json ... ```)
+    text = re.sub(r"```(?:json)?\s*", "", text).strip().rstrip("`").strip()
 
-    "objects":
-        "List the most notable objects or elements in this scene, "
-        "separated by commas. Maximum 6 items.",
-}
+    def _clean(data: dict) -> dict:
+        return {k: data.get(k, f"ERROR: missing key '{k}'") for k in _COMBINED_KEYS}
+
+    try:
+        return _clean(json.loads(text))
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # Tentar extrair o objeto JSON do meio do texto
+    match = re.search(r"\{[^{}]+\}", text, re.DOTALL)
+    if match:
+        try:
+            return _clean(json.loads(match.group()))
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    logger.warning("Resposta LLM não parseável: %s", text[:120])
+    return {k: "ERROR: unparseable response" for k in _COMBINED_KEYS}
+
 
 LOCATION_MAP = {
     "indoor": "interior", "indoors": "interior", "inside": "interior",
@@ -199,9 +226,14 @@ class LLMDescriber:
 
         import torch
 
+        # float16 em GPU/MPS (2× mais rápido, metade da memória);
+        # float32 em CPU (CPUs não têm SIMD nativo para float16)
+        device_str = str(self._device) if self._device else "cpu"
+        dtype = torch.float16 if device_str in ("cuda", "mps") else torch.float32
+
         logger.info(
-            "Carregando Moondream 2 (%s) — primeira execução baixa ~1.9GB...",
-            self.revision,
+            "Carregando Moondream 2 (%s) — dtype=%s device=%s — primeira execução baixa ~1.9GB...",
+            self.revision, dtype, device_str,
         )
         t0 = time.time()
 
@@ -212,7 +244,7 @@ class LLMDescriber:
             self.model_id,
             revision=self.revision,
             trust_remote_code=True,
-            torch_dtype=torch.float32,
+            torch_dtype=dtype,
         )
         self._model = self._model.to(self._device)
         self._model.eval()
@@ -220,16 +252,16 @@ class LLMDescriber:
         logger.info("✓ Moondream 2 carregado em %.1fs", time.time() - t0)
 
     def _query_frame(self, image: Image.Image) -> dict:
-        """Faz todas as perguntas sobre um frame, reutilizando o encoding."""
+        """Faz uma única chamada ao decoder por frame usando prompt combinado."""
         self._load_model()
         enc = self._model.encode_image(image)
-        raw = {}
-        for field, prompt in PROMPTS.items():
-            try:
-                raw[field] = self._model.answer_question(enc, prompt, self._tokenizer).strip()
-            except Exception as e:
-                raw[field] = f"ERROR: {e}"
-        return raw
+        try:
+            raw_text = self._model.answer_question(
+                enc, COMBINED_PROMPT, self._tokenizer
+            ).strip()
+            return _parse_combined_response(raw_text)
+        except Exception as e:
+            return {k: f"ERROR: {e}" for k in _COMBINED_KEYS}
 
     def _build_metadata(self, row: pd.Series, raw: dict) -> dict:
         """Monta o dict final de metadados combinando dados do catálogo + respostas LLM."""
