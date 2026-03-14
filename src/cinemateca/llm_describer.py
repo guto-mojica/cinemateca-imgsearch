@@ -30,6 +30,13 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 
+# ─── Constantes de modelo ────────────────────────────────────────────────────
+
+# Moondream 2 usa SigLIP com entrada 378×378. Pré-redimensionar com PIL
+# (rápido, bilinear) evita que o pyvips interno faça um resize multi-pass
+# de alta qualidade (~20s/frame). PIL completa o mesmo trabalho em <0.1s.
+_MOONDREAM_INPUT_SIZE = 378
+
 # ─── Prompt combinado ────────────────────────────────────────────────────────
 #
 # Uma única chamada ao decoder por frame em vez de 6 separadas.
@@ -254,6 +261,10 @@ class LLMDescriber:
     def _query_frame(self, image: Image.Image) -> dict:
         """Faz uma única chamada ao decoder por frame usando prompt combinado."""
         self._load_model()
+        image = image.resize(
+            (_MOONDREAM_INPUT_SIZE, _MOONDREAM_INPUT_SIZE),
+            Image.Resampling.BILINEAR,
+        )
         enc = self._model.encode_image(image)
         try:
             raw_text = self._model.answer_question(
