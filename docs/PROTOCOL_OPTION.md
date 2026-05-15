@@ -5,6 +5,67 @@
 
 ---
 
+## Release goal: standalone binary under 500 MB
+
+The institution deployment target is a self-contained binary — no Python install,
+no pip, no venv. The full install today is approximately:
+
+| Component | Size |
+|---|---|
+| PyTorch + torchvision | ~650 MB |
+| open-clip-torch | ~100 MB |
+| transformers | ~100 MB |
+| facenet-pytorch, ultralytics, etc. | ~150 MB |
+| Python runtime + FastAPI + everything else | ~100 MB |
+| **Total binary** | **~1.1 GB** |
+
+Model weights are separate and stay separate regardless of approach (~2.4 GB,
+downloaded on first run): CLIP ViT-B/32 ~400 MB, Moondream 2 ~2 GB, YOLOv8n ~6 MB.
+
+The 500 MB target requires eliminating PyTorch from the binary entirely.
+A language rewrite (Rust, Go) was considered and rejected — the frontend (HTMX,
+Jinja2, Babel i18n) represents significant investment and the bottleneck is PyTorch
+specifically, not Python.
+
+### ONNX Runtime path
+
+Replace PyTorch with ONNX Runtime (~35 MB) for CLIP, YOLOv8 and MTCNN, and replace
+`transformers` with `llama-cpp-python` (~30 MB, pre-built wheels) for Moondream.
+
+| Removed | Added | Size delta |
+|---|---|---|
+| `torch`, `torchvision` | `onnxruntime` | −615 MB |
+| `open-clip-torch` | CLIP `.onnx` files (weights only, already counted) | −100 MB |
+| `transformers` | `llama-cpp-python` | −70 MB |
+| `facenet-pytorch` | ONNX MTCNN or OpenCV DNN (already a dep) | −50 MB |
+
+**Estimated binary after migration: ~200–250 MB.** Well under target.
+
+### On fine-tuning and model size
+
+Fine-tuning does not reduce binary size — a fine-tuned model has the same
+architecture and the same weight file size as the base model. What shrinks weights:
+
+- **Quantization** (INT8/INT4) — cuts weight files 2–4×. Moondream GGUF is already
+  quantized. Apply this at the weights level, independently of the binary approach.
+- **Knowledge distillation** — train a smaller student. High effort, quality tradeoff.
+- **Pruning** — hard to apply cleanly to transformers.
+
+Quantization is the right lever for weight size. The Protocol design below is the
+right lever for swapping in quantized or fine-tuned variants without touching the pipeline.
+
+### One-time model export (pre-release step)
+
+Before building the binary, each PyTorch model must be exported once:
+
+- **CLIP**: `open_clip` provides export scripts → two `.onnx` files (image + text encoder).
+- **YOLOv8**: `YOLO('yolov8n.pt').export(format='onnx')` — one command, native Ultralytics support.
+- **MTCNN**: Community ONNX exports available; or swap for OpenCV DNN face detector (no new dep).
+- **Moondream 2**: No official ONNX export. Must use GGUF via `llama-cpp-python`.
+  Download `moondream-2b.gguf` from HuggingFace.
+
+---
+
 ## Problem
 
 Every model in `src/cinemateca/` is hardwired to one backend:
