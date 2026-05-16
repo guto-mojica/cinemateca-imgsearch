@@ -197,8 +197,9 @@ Selected (active film):
 
 Film title in tree uses `--font-serif`. Folder names use `--font-sans`.
 
-Processing indicator: italic text + spinner icon (Phosphor `SpinnerGap` at `regular` weight,
-animated via `animation: spin 1s linear infinite`).
+Processing indicator: italic text + spinner icon (vendored Phosphor
+`spinner-gap`, regular weight, animated via `animation: spin 1s linear infinite`
+through the `spin` class on the `icon()` macro).
 
 ### Scene card
 
@@ -295,7 +296,8 @@ Dialog:
   max-width: 520px
   margin: auto
 
-Header: film-reel icon (Phosphor, duotone) + project name in serif
+Header: film-reel icon (vendored Phosphor, regular weight, enlarged via the
+`modal-logo` class) + project name in serif
 Body: version, license, institutional credits, model attributions
 Footer: link to GitHub, link to SETUP.md
 ```
@@ -335,33 +337,65 @@ No other button variants in v0.3.0. If you need a new one, document it here firs
 
 ## Icons
 
-**Library:** Phosphor Icons — web component build.
-**Load:** `<script src="https://unpkg.com/@phosphor-icons/web"></script>` in `base.html`.
-**Default weight:** `regular` (light surfaces) → use `light` weight on dark surfaces.
+**Library:** Phosphor Icons — path data vendored locally as inline SVG.
+**Source:** the official Phosphor **regular** set, vendored verbatim under
+`web/static/icons/phosphor/` (with the upstream MIT `LICENSE` for provenance).
+**Load:** none. There is **no external CDN** — no
+`<script src="https://unpkg.com/@phosphor-icons/web">`, no runtime web
+component. This is a deliberate offline-first constraint (a regression test
+forbids any external icon reference).
 
-Usage: `<ph-icon name="magnifying-glass" weight="light"></ph-icon>`
+Icons render through the `icon(name, extra)` Jinja macro in
+`web/templates/partials/_icons.html`, which emits an inline
+`<svg ... viewBox="0 0 256 256" fill="currentColor">`. Two parity properties
+matter:
+
+- `fill="currentColor"` — the glyph inherits the surrounding text color, the
+  same as the old web component did.
+- `class="ph-icon"` sizes the glyph at `1em` (see `main.css`), so it scales
+  with the local font-size; the `extra` argument carries through state
+  classes (e.g. `spin`, `modal-logo`) for callers that need a larger glyph
+  or animation.
+
+Usage (import once per template, then call the macro):
+
+```jinja
+{% from "partials/_icons.html" import icon %}
+{{ icon("magnifying-glass") }}
+{{ icon("film-reel", "modal-logo") }}
+{{ icon("spinner-gap", "spin") }}
+```
 
 ### Canonical icon assignments
 
-| Element | Phosphor name | Weight |
-|---|---|---|
-| Library / Acervo | `film-reel` | light |
-| Film / Filme | `film-strip` | light |
-| Folder | `folder` | light |
-| Folder (open) | `folder-open` | light |
-| Search / Buscar | `magnifying-glass` | light |
-| Scenes / Cenas | `squares-four` | light |
-| Annotate / Anotar | `tag` | light |
-| Processing | `spinner-gap` | light + spin |
-| Done / success | `check-circle` | fill |
-| Add film | `plus` | regular |
-| About | `info` | light |
-| Locale switch | `globe` | light |
-| Close modal | `x` | regular |
-| Expand tree node | `caret-right` | regular |
-| Collapse tree node | `caret-down` | regular |
+Only the **regular** weight is vendored. This is a deliberate offline
+tradeoff: a few elements that previously used `fill` or `duotone` weight
+(stepper done/error states, the modal logo) are now rendered at `regular`
+weight like everything else. There is no per-icon weight choice — color and
+emphasis come from the surrounding context (text color, size class), not
+from a Phosphor weight variant.
 
-Do not use icons not listed here without updating this table.
+| Element | Phosphor name |
+|---|---|
+| Library / Acervo | `film-reel` |
+| Film / Filme | `film-strip` |
+| Search / Buscar | `magnifying-glass` |
+| Scenes / Cenas | `squares-four` |
+| Annotate / Anotar | `tag` |
+| Processing | `spinner-gap` (+ `spin` class) |
+| Done / success | `check-circle` |
+| Error | `x-circle` |
+| Pending | `circle` / `circle-dashed` |
+| Not allowed | `prohibit` |
+| Remove | `minus-circle` |
+| Add film | `upload-simple` |
+| About | `info` |
+| Locale switch | `globe` |
+| Close modal | `x` |
+
+Do not use icons not listed here without updating this table **and**
+adding the path data to the `_icons.html` macro (icons are vendored, not
+loaded on demand).
 
 ---
 
@@ -419,7 +453,9 @@ No other animations. If you think you need one, document it here first.
 - No color-coding beyond the semantic palette above.
 - No more than three font sizes on any single screen.
 - No decorative dividers or ornament.
-- No icons outside the canonical assignments table without updating this doc.
+- No icons outside the canonical assignments table without updating this doc
+  AND vendoring the path data into `_icons.html`.
+- No external icon CDN / web component (offline-first; a test forbids it).
 
 ---
 
