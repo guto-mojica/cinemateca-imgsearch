@@ -89,10 +89,36 @@ backend. Unknown name → `ValueError`. `pipeline.py` calls
 ### `VisualAnalyzer` facade
 
 `visual_analyzer.VisualAnalyzer` is an orchestrator the pipeline consumes
-directly (it composes Face + Object + Environment). It **stays** as a facade but
-is refactored to receive its three sub-detectors via constructor injection from
-the registry, instead of constructing them itself. Pipeline code that uses
-`VisualAnalyzer` is otherwise unchanged.
+directly (it composes Face + Object + Environment). The class **stays in
+`src/cinemateca/visual_analyzer.py`** as a facade but is refactored to receive
+its three sub-detectors via constructor injection from the registry, instead of
+constructing them itself. The three detector classes themselves move to
+`models/{face,objects,environment}/`. `from cinemateca.visual_analyzer import
+VisualAnalyzer` therefore still resolves; the detector classes' old import
+locations do not.
+
+### Consumer migration — hard cutover (no shims)
+
+Decided 2026-05-17: the moved classes get **no back-compat re-export shims**.
+Every consumer of an old import path is updated in this effort. Inventory
+(verified 2026-05-17):
+
+| Consumer | Old reference | New reference |
+|---|---|---|
+| `pipeline.py:243,258` | `from cinemateca.visual_analyzer import VisualAnalyzer` | unchanged (VisualAnalyzer stays); built via `registry.get_*` injection |
+| `pipeline.py:270,292` | `from cinemateca.embeddings import CLIPEmbedder` | `registry.get_image_embedder(cfg)` |
+| `pipeline.py:313,349` | `from cinemateca.llm_describer import LLMDescriber` + `.describe_keyframes` | `registry.get_scene_describer(cfg)` + `.describe_batch` |
+| `api/services/search.py:151,154,189` | `from cinemateca.embeddings import CLIPEmbedder`; `CLIPEmbedder.load`; `CLIPEmbedder()` | lazy `from cinemateca.models.clip.openclip import OpenClipEmbedder`; `OpenClipEmbedder.load`; `OpenClipEmbedder()` |
+| `api/services/search.py:304,314` | `from cinemateca.embeddings import SemanticSearch` | unchanged (`SemanticSearch` stays in `embeddings.py`) |
+| `tests/test_smoke.py:102` | `from cinemateca.embeddings import CLIPEmbedder` | `from cinemateca.models.clip.openclip import OpenClipEmbedder` |
+| `tests/test_smoke.py:107` | `from cinemateca.llm_describer import LLMDescriber` | `from cinemateca.models.describer.gguf import MoondreamGGUFDescriber` |
+| `tests/test_smoke.py:119,128,136` | `from cinemateca.llm_describer import _parse_num_people/_parse_objects/_generate_tags` | `from cinemateca.models.describer._common import …` |
+| `tests/test_search_service.py:56` (`clipfree`) | monkeypatch `cinemateca.embeddings.CLIPEmbedder` | monkeypatch `cinemateca.models.clip.openclip.OpenClipEmbedder` (lazy import in search.py preserved so the patch lands) |
+| `tests/test_scene_id_filtering.py:183` | `from cinemateca.embeddings import SemanticSearch` | unchanged |
+
+`embeddings.py` keeps only `SemanticSearch` (+ its imports). `llm_describer.py`
+is deleted. The detector classes are removed from `visual_analyzer.py`, which
+keeps only the refactored `VisualAnalyzer` facade.
 
 ### `config/default.yaml` addition
 
